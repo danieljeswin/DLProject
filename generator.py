@@ -25,27 +25,27 @@ class Generator(nn.Module):
     def forward(self, input):
         return self.network(input)
 
-# class ResNetBlock(nn.Module):
-#     def __init__(self, num_filters):
-#         """ num_filters : number of filters in the convolutional layer
-#         """
-#         # Reflection padding is always used, batch size is 1 so instance normalization is always used, Dropout is never 
-#         # used and Bias is always used. Following implementation details given in the CycleGAN Paper.
-#         super(ResNetBlock, self).__init__()
-#         self.resnet_block = nn.Sequential(
-#             nn.ReflectionPad2d(padding = 1),
-#             nn.Conv2d(in_channels = num_filters, out_channels = num_filters, kernel_size = 3, padding = 0),
-#             nn.InstanceNorm2d(num_features = num_filters),
-#             nn.ReLU(inplace = True),
-#             nn.ReflectionPad2d(padding = 1),
-#             nn.Conv2d(in_channels = num_filters, out_channels = num_filters, kernel_size = 3, padding = 0),
-#             nn.InstanceNorm2d(num_features = num_filters),
-#             nn.ReLU(inplace = True)
-#         )
+class ResNetBlockCycleGAN(nn.Module):
+    def __init__(self, num_filters):
+        """ num_filters : number of filters in the convolutional layer
+        """
+        # Reflection padding is always used, batch size is 1 so instance normalization is always used, Dropout is never 
+        # used and Bias is always used. Following implementation details given in the CycleGAN Paper.
+        super(ResNetBlockCycleGAN, self).__init__()
+        self.resnet_block = nn.Sequential(
+            nn.ReflectionPad2d(padding = 1),
+            nn.Conv2d(in_channels = num_filters, out_channels = num_filters, kernel_size = 3, padding = 0),
+            nn.InstanceNorm2d(num_features = num_filters),
+            nn.ReLU(inplace = True),
+            nn.ReflectionPad2d(padding = 1),
+            nn.Conv2d(in_channels = num_filters, out_channels = num_filters, kernel_size = 3, padding = 0),
+            nn.InstanceNorm2d(num_features = num_filters),
+            nn.ReLU(inplace = True)
+        )
     
-#     def forward(self, x):
-#         output = self.resnet_block(x)
-#         return x + output # Resnet adds skip connections
+    def forward(self, x):
+        output = self.resnet_block(x)
+        return x + output # Resnet adds skip connections
 
 
 class CycleGANGenerator(nn.Module):
@@ -72,15 +72,15 @@ class CycleGANGenerator(nn.Module):
             nn.ReLU(inplace = True),
 
             # Resnet blocks
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
-            ResNetBlock(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
+            ResNetBlockCycleGAN(gen_features * 4),
 
             # Upsampling the image
             nn.ConvTranspose2d(in_channels = gen_features * 4, out_channels = gen_features * 2, kernel_size = 3, stride = 2, padding = 1, output_padding = 1),
