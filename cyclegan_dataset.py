@@ -7,6 +7,33 @@ import torchvision.transforms as transforms
 import torch
 import numpy as np
 
+class CycleGANTestDataset(Dataset):
+    def __init__(self, base_dir, folder = 'A'):
+        self.base_dir = base_dir
+        path = os.path.join(base_dir, 'test' + folder)
+        self.images = glob.glob(path + '/*.jpg')
+
+        self.size = len(self.images)
+        self.transform = self.transform_image()
+
+    def __len__(self):
+        return self.size
+
+    def transform_image(self):
+        """ Get the transformations to be applied on the images
+        """
+        transform_list = []
+        transform_list.append(transforms.ToTensor())
+
+        return transforms.Compose(transforms = transform_list) # Compose all the transforms together and return
+
+    def __getitem__(self, index):
+        index = index % self.size
+        image = Image.open(self.images[index]).convert('RGB')
+        image = self.transform(image)
+
+        return {'path' : self.images[index], 'data' : image}
+
 class CycleGANDataset(Dataset):
     def __init__(self, base_dir, phase = 'train'):
 

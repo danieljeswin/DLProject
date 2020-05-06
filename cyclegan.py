@@ -10,7 +10,7 @@ from PIL import Image
 import os
 import glob
 from torch.utils.tensorboard import SummaryWriter
-from cyclegan_dataset import CycleGANDataset
+from cyclegan_dataset import CycleGANDataset, CycleGANTestDataset
 from torch.utils.data.dataloader import DataLoader
 import torchvision
 import torchvision.utils as vutils
@@ -59,13 +59,13 @@ class GAN:
         self.gan_loss = nn.MSELoss()
 
         # Get the dataset and dataloaders
-        self.dataset = CycleGANDataset(base_dir = '/home/daniel/DL/Project/train/CityScapes')
+        self.dataset = CycleGANDataset(base_dir = '/home/daniel/DL/Project/train/Yosemite256')
         self.dataloader = DataLoader(self.dataset, batch_size = 1, num_workers = 2)
 
         # Writers to tensorboard
         self.steps = 0
-        self.writer = SummaryWriter(comment = 'cyclegan_cityscapes')
-    
+        self.writer = SummaryWriter(comment = 'cyclegan_yosemite_3_resnet_4_downsampling')
+
     def save_network(self, epoch):
         """ Save all the networks
         """
@@ -75,6 +75,27 @@ class GAN:
         torch.save(self.generator_B.state_dict(), '%s/generator_B_epoch_%d.pth' % (path, epoch))
         torch.save(self.discriminator_A.state_dict(), '%s/discriminator_A_epoch_%d.pth' % (path, epoch))
         torch.save(self.discriminator_B.state_dict(), '%s/discriminator_B_epoch_%d.pth' % (path, epoch))
+        torch.save(self.discriminator_A_optimizer.state_dict(), '%s/discriminator_A_optimizer_epoch_%d.pth' % (path, epoch))
+        torch.save(self.discriminator_B_optimizer.state_dict(), '%s/discriminator_B_optimizer_epoch_%d.pth' % (path, epoch))
+        torch.save(self.generator_A_optimizer.state_dict(), '%s/generator_A_optimizer_epoch_%d.pth' % (path, epoch))
+        torch.save(self.generator_B_optimizer.state_dict(), '%s/generator_B_optimizer_epoch_%d.pth' % (path, epoch))
+    
+    def resume_training(self, epoch):
+        path = os.path.join(os.getcwd(), 'models', 'cyclegan')
+        self.generator_A.load_state_dict(torch.load('%s/generator_A_epoch_%d.pth' % (path, epoch)))
+        self.generator_B.load_state_dict(torch.load('%s/generator_B_epoch_%d.pth' % (path, epoch)))
+        self.discriminator_A.load_state_dict(torch.load('%s/discriminator_A_epoch_%d.pth' % (path, epoch)))
+        self.discriminator_B.load_state_dict(torch.load('%s/discriminator_B_epoch_%d.pth' % (path, epoch)))
+        self.generator_A_optimizer.load_state_dict(torch.load('%s/generator_A_optimizer_epoch_%d.pth' % (path, epoch)))
+        self.generator_B_optimizer.load_state_dict(torch.load('%s/generator_B_optimizer_epoch_%d.pth' % (path, epoch)))
+        self.discriminator_A_optimizer.load_state_dict(torch.load('%s/discriminator_A_optimizer_epoch_%d.pth' % (path, epoch)))
+        self.discriminator_B_optimizer.load_state_dict(torch.load('%s/discriminator_B_optimizer_epoch_%d.pth' % (path, epoch)))        
+
+        self.generator_A_scheduler = optim.lr_scheduler.LambdaLR(self.generator_A_optimizer, lr_lambda = self.schedule_rate, last_epoch = epoch)
+        self.generator_B_scheduler = optim.lr_scheduler.LambdaLR(self.generator_B_optimizer, lr_lambda = self.schedule_rate, last_epoch = epoch)
+        self.discriminator_A_scheduler = optim.lr_scheduler.LambdaLR(self.discriminator_A_optimizer, lr_lambda = self.schedule_rate, last_epoch = epoch)
+        self.discriminator_B_scheduler = optim.lr_scheduler.LambdaLR(self.discriminator_B_optimizer, lr_lambda = self.schedule_rate, last_epoch = epoch)
+    
 
     def schedule_rate(self, epoch):
         epoch = max(0, epoch - 100)
@@ -186,8 +207,11 @@ class GAN:
         self.discriminator_A_scheduler.step()
         self.discriminator_B_scheduler.step()
     
-    def train(self):
-        for epoch in range(201):
+    def train(self, start_epoch):
+        if start_epoch > 0:
+            self.resume_training(start_epoch)
+            self.steps = start_epoch * len(self.dataset)
+        for epoch in range(start_epoch, 201):
             for i, data in enumerate(self.dataloader):
                 imageA = data['A']
                 imageB = data['B']
@@ -220,27 +244,55 @@ class GAN:
         self.discriminator_A.load_state_dict(torch.load('%s/discriminator_A_epoch_%d.pth' % (path, epoch)))
         self.discriminator_B.load_state_dict(torch.load('%s/discriminator_B_epoch_%d.pth' % (path, epoch)))
 
-    def test(self):
-        imagesA, imagesB = self.dataset.load_test_images() # Load all the test images
+    def test(self, folder):
+
         self.load_networks(epoch = 200) # Load the saved weights for all networks
 
         # Switch generator networks to eval mode for testing
         self.generator_A.eval()
         self.generator_B.eval()
 
-        imagesA = imagesA.to(self.device)
-        imagesB = imagesB.to(self.device)
+        # Get the dataset and dataloaders
+        self.dataset = CycleGANTestDataset(base_dir = '/home/daniel/DL/Project/train/Yosemite256', folder = folder)
+        self.dataloader = DataLoader(self.dataset, batch_size = 1, num_workers = 2)
 
-        # Generate fake images
-        fakesB = self.generator_B(imagesA)
-        fakesA = self.generator_A(imagesB)
+        for i, data in enumerate(self.dataloader):
+            print(i)
+            image = data['data']
+            image = image.to(self.device)   
+            if folder == 'A':
+                fake = self.generator_B(image)
+            else:
+                fake = self.generator_A(image)
+            path = data['path']
+            file_name = path[0][47:]
 
-        transform = torchvision.transforms.ToPILImage()
-        for i in range(fakesA.size()[0]):
-            fakeA = fakesA[i, :, :, :].cpu()
-            fakeA = transform(fakeA)
-            fakeA.show()
+            path = os.path.join(os.getcwd(), 'results', 'cyclegan')
+            transform = torchvision.transforms.ToPILImage()
+            fake = fake[0, :, :, :]
+            image = image[0, :, :, :]
+            fake = fake.cpu()
+
+            fake = transform(fake)
+            image = image.cpu()
+            image = transform(image)
+            if folder == 'A':
+                real_path = os.path.join(path, 'realA')
+                fake_path = os.path.join(path, 'fakeB')
+            else:
+                real_path = os.path.join(path, 'realB')
+                fake_path = os.path.join(path, 'fakeA')
+
+            real_path = real_path + file_name
+            fake_path = fake_path + file_name
+
+            fake.save(fake_path)
+            image.save(real_path)
+
+
+
+
 
 if __name__ == "__main__":
     cyclegan = GAN()
-    cyclegan.train()
+    cyclegan.train(0)
